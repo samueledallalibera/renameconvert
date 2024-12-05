@@ -33,6 +33,14 @@ def converti_p7m_in_xml(cartella_output, file_zip):
 
     return converted_files
 
+# Funzione per creare un file ZIP contenente i file XML convertiti
+def crea_zip_con_file(xml_files, nome_zip):
+    zip_path = os.path.join("output_temp", nome_zip)
+    with zipfile.ZipFile(zip_path, 'w') as zipf:
+        for file in xml_files:
+            zipf.write(file, os.path.basename(file))
+    return zip_path
+
 # Streamlit App
 st.title("Conversione file .p7m in XML")
 
@@ -47,20 +55,20 @@ if uploaded_file and st.button("Avvia Conversione"):
     if converted_files:
         st.success("Conversione completata! Puoi scaricare i file convertiti.")
 
-        # Aggiungi pulsanti di download per ogni file convertito
-        for file_path in converted_files:
-            with open(file_path, "rb") as f:
-                file_data = f.read()
-                file_name = os.path.basename(file_path)
-                st.download_button(
-                    label=f"Scarica {file_name}",
-                    data=file_data,
-                    file_name=file_name,
-                    mime="application/xml"
-                )
+        # Crea un file ZIP contenente tutti i file XML convertiti
+        zip_path = crea_zip_con_file(converted_files, "file_convertiti.zip")
+
+        # Aggiungi un pulsante di download per il file ZIP
+        with open(zip_path, "rb") as f:
+            file_data = f.read()
+            st.download_button(
+                label="Scarica il file ZIP con i file XML",
+                data=file_data,
+                file_name="file_convertiti.zip",
+                mime="application/zip"
+            )
 
     else:
         st.write("Nessun file convertito.")
-    converti_p7m_in_xml(output_folder, uploaded_file)
-    st.success("Conversione completata! Controlla i file convertiti nella cartella di output.")
+
 
