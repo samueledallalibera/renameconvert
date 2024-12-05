@@ -1,6 +1,9 @@
 import os
 import xml.etree.ElementTree as ET
 import pandas as pd
+import zipfile
+from io import BytesIO
+import streamlit as st
 
 # Funzione per decodificare e convertire i file .p7m in .xml
 def converti_p7m_in_xml(cartella):
@@ -11,7 +14,7 @@ def converti_p7m_in_xml(cartella):
             xml_output_path = os.path.join(cartella, f"{idx}.xml")
             os.system(f'openssl smime -verify -noverify -in "{percorso_file}" -inform DER -out "{xml_output_path}"')
             os.remove(percorso_file)  # Rimuove il file .p7m originale
-            print(f"File {nome_file} convertito in XML.")
+            st.write(f"File {nome_file} convertito in XML.")
 
 # Funzione per estrarre dati essenziali dal file XML
 def estrai_dati_da_xml(xml_file_path):
@@ -38,7 +41,7 @@ def estrai_dati_da_xml(xml_file_path):
 
         return dati
     except ET.ParseError as e:
-        print(f"Errore nel parsing di {xml_file_path}: {e}")
+        st.warning(f"Errore nel parsing di {xml_file_path}: {e}")
         return None
 
 # Funzione per rinominare i file XML
@@ -50,9 +53,9 @@ def rinomina_file(cartella, dati):
             nuovo_percorso = os.path.join(cartella, nuovo_nome)
             try:
                 os.rename(vecchio_nome, nuovo_percorso)
-                print(f"Rinominato: {riga['FileName']} -> {nuovo_nome}")
+                st.write(f"Rinominato: {riga['FileName']} -> {nuovo_nome}")
             except OSError as e:
-                print(f"Errore nella rinomina di {riga['FileName']}: {e}")
+                st.error(f"Errore nella rinomina di {riga['FileName']}: {e}")
 
 # Funzione principale per elaborare i file XML
 def processa_file_xml(cartella):
@@ -76,33 +79,57 @@ def processa_file_xml(cartella):
         )
     return df
 
-# Implementazione Streamlit
-import streamlit as st
-
+# Streamlit app
 st.title("Gestione Fatture XML e P7M")
 
-# Caricamento della cartella
-cartella = st.text_input("Inserisci il percorso della cartella con i file:", "")
+# Caricamento del file ZIP
+uploaded_zip = st.file_uploader("Carica un file .zip contenente i file P7M/XML", type=["zip"])
 
-if cartella and st.button("Avvia elaborazione"):
-    if os.path.exists(cartella):
+if uploaded_zip:
+    # Creazione di una cartella temporanea per gestire i file
+    temp_folder = "temp_files"
+    os.makedirs(temp_folder, exist_ok=True)
+
+    # Estrazione dei file dal .zip
+    with zipfile.ZipFile(uploaded_zip) as z:
+        z.extractall(temp_folder)
+        st.write(f"{len(z.namelist())} file estratti nella cartella temporanea.")
+
         # Conversione dei file .p7m in .xml
         st.write("Conversione dei file .p7m in XML...")
-        converti_p7m_in_xml(cartella)
+        converti_p7m_in_xml(temp_folder)
 
         # Elaborazione dei file XML
         st.write("Elaborazione dei file XML...")
-        dati_df = processa_file_xml(cartella)
+        dati_df = processa_file_xml(temp_folder)
 
         if not dati_df.empty:
             # Rinominare i file
             st.write("Rinominando i file...")
-            rinomina_file(cartella, dati_df)
+            rinomina_file(temp_folder, dati_df)
 
             # Mostrare l'anteprima dei dati
             st.write("Anteprima dei dati estratti:")
             st.dataframe(dati_df)
+
+            # Creare un nuovo file .zip con i file rinominati
+            zip_buffer = BytesIO()
+            with zipfile.ZipFile(zip_buffer, "w") as z:
+                for nome_file in os.listdir(temp_folder):
+                    percorso_file = os.path.join(temp_folder, nome_file)
+                    z.write(percorso_file, arcname=nome_file)
+
+            # Rimozione della cartella temporanea
+            for file in os.listdir(temp_folder):
+                os.remove(os.path.join(temp_folder, file))
+            os.rmdir(temp_folder)
+
+            # Offrire il download del nuovo file .zip
+            st.download_button(
+                label="Scarica i file rinominati",
+                data=zip_buffer.getvalue(),
+                file_name="file_rinominati.zip",
+                mime="application/zip"
+            )
         else:
-            st.write("Nessun dato trovato nei file XML.")
-    else:
-        st.write("Percorso della cartella non valido.")
+            st.error("Nessun dato valido trovato nei file XML.")
