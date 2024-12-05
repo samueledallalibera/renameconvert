@@ -21,6 +21,10 @@ def estrai_dati_da_xml(xml_file_path):
     try:
         tree = ET.parse(xml_file_path)
         root = tree.getroot()
+        
+        # Debug: Mostra il contenuto del file XML
+        st.write(f"Analizzando il file: {xml_file_path}")
+        st.code(ET.tostring(root, encoding='utf-8').decode('utf-8'), language='xml')
 
         dati = {
             "Denominazione": None,
@@ -39,6 +43,8 @@ def estrai_dati_da_xml(xml_file_path):
             dati["Data"] = dati_generali.findtext("Data")
             dati["Numero"] = dati_generali.findtext("Numero")
 
+        # Debug: Mostra i dati estratti
+        st.write(f"Dati estratti dal file {xml_file_path}: {dati}")
         return dati
     except ET.ParseError as e:
         st.warning(f"Errore nel parsing di {xml_file_path}: {e}")
