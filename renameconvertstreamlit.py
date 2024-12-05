@@ -1,20 +1,20 @@
-import streamlit as st
+import os
 import xml.etree.ElementTree as ET
 import pandas as pd
-import os
-import zipfile
+import streamlit as st
 from io import BytesIO
+from zipfile import ZipFile
 
-# Funzione di parsing degli elementi XML
+# Funzione di parsing ricorsivo
 def parse_element(element, parsed_data, parent_tag=""):
     for child in element:
         tag_name = f"{parent_tag}/{child.tag.split('}')[-1]}" if parent_tag else child.tag.split('}')[-1]
-        if list(child):  # Ricorsione sui figli
+        if list(child):  # Se ha figli
             parse_element(child, parsed_data, tag_name)
         else:
             parsed_data[tag_name] = child.text
 
-# Funzione per parsare il file XML
+# Funzione per estrarre dati da un file XML
 def parse_xml_file(xml_file, includi_dettaglio_linee=True):
     tree = ET.parse(xml_file)
     root = tree.getroot()
@@ -63,52 +63,55 @@ def parse_xml_file(xml_file, includi_dettaglio_linee=True):
 
     return all_data
 
-# Funzione per processare tutti i file XML
-def process_all_files(uploaded_files, includi_dettaglio_linee=True):
+# Funzione principale per il caricamento e l'elaborazione dei file XML
+def process_uploaded_files(uploaded_files, includi_dettaglio_linee):
     all_data_combined = []
-
     for uploaded_file in uploaded_files:
         try:
-            file_data = parse_xml_file(uploaded_file, includi_dettaglio_linee)
-            all_data_combined.extend(file_data)
+            data = parse_xml_file(uploaded_file, includi_dettaglio_linee)
+            all_data_combined.extend(data)
         except ET.ParseError as e:
-            st.error(f"Errore nel parsing del file {uploaded_file.name}: {e}")
-
+            st.warning(f"Errore nel parsing del file {uploaded_file.name}: {e}")
     return pd.DataFrame(all_data_combined)
 
 # Interfaccia Streamlit
-st.title("Gestione Fatture Elettroniche XML")
+st.title("Estrazione Dati da Fatture Elettroniche XML")
 
-uploaded_zip = st.file_uploader("Carica un file .zip contenente XML o singoli file XML", type=["zip", "xml"])
-includi_dettaglio_linee = st.checkbox("Includi dettaglio delle linee", value=True)
+# Caricamento file
+uploaded_file = st.file_uploader("Carica file XML o un archivio .zip", type=["xml", "zip"], accept_multiple_files=True)
 
-if uploaded_zip:
-    with st.spinner("Elaborazione file..."):
-        # Estrazione dei file XML
-        extracted_files = []
-        if uploaded_zip.name.endswith(".zip"):
-            with zipfile.ZipFile(uploaded_zip) as z:
-                for file_name in z.namelist():
-                    if file_name.endswith(".xml"):
-                        extracted_files.append(BytesIO(z.read(file_name)))
+# Opzione per includere il dettaglio delle linee
+includi_dettaglio_linee = st.checkbox("Includi dettaglio linee", value=True)
+
+if uploaded_file:
+    all_files = []
+
+    # Gestione file ZIP
+    for file in uploaded_file:
+        if file.name.endswith(".zip"):
+            with ZipFile(file) as z:
+                for name in z.namelist():
+                    if name.endswith(".xml"):
+                        all_files.append(BytesIO(z.read(name)))
         else:
-            extracted_files.append(uploaded_zip)
+            all_files.append(file)
 
-        # Parsing e creazione del DataFrame
-        df = process_all_files(extracted_files, includi_dettaglio_linee)
+    # Elaborazione dei file
+    with st.spinner("Elaborazione in corso..."):
+        extracted_data_df = process_uploaded_files(all_files, includi_dettaglio_linee)
 
-        if not df.empty:
-            # Esportazione Excel
-            output = BytesIO()
-            df.to_excel(output, index=False)
-            output.seek(0)
+    if not extracted_data_df.empty:
+        st.success("Elaborazione completata!")
+        st.dataframe(extracted_data_df.head())
 
-            st.success("Elaborazione completata!")
-            st.download_button(
-                label="Scarica il file Excel",
-                data=output,
-                file_name="fatture_elaborate.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
-        else:
-            st.warning("Nessun dato valido trovato nei file caricati.")
+        # Esportazione in Excel
+        buffer = BytesIO()
+        extracted_data_df.to_excel(buffer, index=False)
+        st.download_button(
+            label="Scarica Dati in Excel",
+            data=buffer,
+            file_name="fatture_dati_estratti.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+    else:
+        st.error("Nessun dato valido trovato nei file caricati.")
