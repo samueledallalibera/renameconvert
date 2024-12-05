@@ -1,8 +1,9 @@
 import os
 import zipfile
+import subprocess
 import streamlit as st
 
-# Funzione per convertire file .p7m in .xml
+# Funzione per convertire file .p7m in .xml utilizzando OpenSSL
 def converti_p7m_in_xml(cartella_output, file_zip):
     # Estrai file ZIP
     try:
@@ -18,13 +19,13 @@ def converti_p7m_in_xml(cartella_output, file_zip):
         if file_name.endswith(".p7m"):
             percorso_file = os.path.join(cartella_output, file_name)
             percorso_output = os.path.splitext(percorso_file)[0] + ".xml"
-
+            
             # Usa il comando OpenSSL per convertire il file
             comando = f'openssl smime -verify -noverify -in "{percorso_file}" -inform DER -out "{percorso_output}"'
-            risultato = os.system(comando)
+            risultato = subprocess.run(comando, shell=True, capture_output=True)
 
             # Controlla l'esito del comando
-            if risultato == 0:  # OpenSSL ha avuto successo
+            if risultato.returncode == 0:  # OpenSSL ha avuto successo
                 os.remove(percorso_file)  # Rimuovi il file originale
                 converted_files.append(percorso_output)  # Aggiungi il percorso del file convertito
                 st.write(f"Convertito con successo: {file_name} in XML.")
@@ -70,5 +71,3 @@ if uploaded_file and st.button("Avvia Conversione"):
 
     else:
         st.write("Nessun file convertito.")
-
-
